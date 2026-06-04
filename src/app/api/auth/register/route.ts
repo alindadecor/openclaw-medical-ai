@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createToken, hashPassword } from "@/lib/auth";
+import { createUser, getUserByEmail } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -16,8 +17,26 @@ export async function POST(request: Request) {
       );
     }
 
+    if (password.length < 6) {
+      return NextResponse.json(
+        { success: false, error: "Password must be at least 6 characters" },
+        { status: 400 }
+      );
+    }
+
+    const existing = await getUserByEmail(email);
+    if (existing) {
+      return NextResponse.json(
+        { success: false, error: "Email already registered" },
+        { status: 409 }
+      );
+    }
+
     const id = crypto.randomUUID();
-    const password_hash = await hashPassword(password);
+    const passwordHash = await hashPassword(password);
+
+    await createUser(id, email, passwordHash, name);
+
     const token = await createToken({ userId: id, email });
 
     const response = NextResponse.json({
@@ -33,15 +52,11 @@ export async function POST(request: Request) {
       path: "/",
     });
 
-    // In production, save to D1:
-    // const { env } = getCloudflareContext();
-    // await env.DB.prepare("INSERT INTO users ...").bind(...).run();
-    void password_hash;
-
     return response;
-  } catch {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Registration failed";
     return NextResponse.json(
-      { success: false, error: "Registration failed" },
+      { success: false, error: msg },
       { status: 500 }
     );
   }

@@ -5,13 +5,20 @@ import {
   extractCitations,
   extractConfidence,
 } from "@/lib/ai-gateway";
+import { getTokenFromHeaders, verifyToken } from "@/lib/auth";
+import {
+  createChatSession,
+  saveChatMessage,
+  incrementUsage,
+} from "@/lib/db";
 import type { PubMedArticle } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
-    const { message, model } = (await request.json()) as {
+    const { message, model, sessionId } = (await request.json()) as {
       message: string;
       model?: string;
+      sessionId?: string;
     };
 
     if (!message) {
@@ -21,13 +28,20 @@ export async function POST(request: Request) {
       );
     }
 
+    // Authenticate user (optional — degrade gracefully)
+    let userId: string | null = null;
+    const token = getTokenFromHeaders(request.headers);
+    if (token) {
+      const payload = await verifyToken(token);
+      if (payload) userId = payload.userId;
+    }
+
     // Step 1: Search PubMed for relevant articles
     const { pmids } = await searchPubMed(message, 5);
     let articles: PubMedArticle[] = [];
 
     if (pmids.length > 0) {
       articles = await fetchArticleSummaries(pmids);
-      // Fetch abstracts for top 3
       const abstracts = await Promise.all(
         pmids.slice(0, 3).map((id) => fetchAbstract(id))
       );
@@ -81,13 +95,41 @@ export async function POST(request: Request) {
       };
       aiResponse = data.choices?.[0]?.message?.content ?? "No response generated.";
     } else {
-      // Demo mode without credentials
       aiResponse = buildDemoResponse(message, articles);
     }
 
     // Step 4: Extract citations and confidence
     const citations = extractCitations(aiResponse, articles);
     const confidence = extractConfidence(aiResponse);
+
+    // Step 5: Persist to D1 if authenticated
+    let currentSessionId = sessionId;
+    if (userId) {
+      try {
+        if (!currentSessionId) {
+          currentSessionId = crypto.randomUUID();
+          const title =
+            message.length > 60 ? message.slice(0, 60) + "..." : message;
+          await createChatSession(currentSessionId, userId, title);
+        }
+        const userMsgId = crypto.randomUUID();
+        await saveChatMessage(userMsgId, currentSessionId, "user", message);
+
+        const assistantMsgId = crypto.randomUUID();
+        await saveChatMessage(
+          assistantMsgId,
+          currentSessionId,
+          "assistant",
+          aiResponse,
+          JSON.stringify(citations),
+          confidence
+        );
+
+        await incrementUsage(userId);
+      } catch {
+        // D1 save failure should not break the response
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -97,6 +139,7 @@ export async function POST(request: Request) {
         confidence,
         sourcesSearched: articles.length,
         model: model || "@cf/meta/llama-3.1-8b-instruct",
+        sessionId: currentSessionId,
       },
     });
   } catch (error) {

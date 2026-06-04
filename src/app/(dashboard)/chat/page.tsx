@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,12 @@ import {
   Sparkles,
   AlertTriangle,
   BookOpen,
+  Download,
+  FileDown,
+  Quote,
+  Plus,
+  MessageSquare,
+  Clock,
 } from "lucide-react";
 import type { Citation } from "@/lib/types";
 
@@ -27,11 +33,21 @@ interface Message {
   sourcesSearched?: number;
 }
 
+interface ChatSession {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedCitations, setSelectedCitations] = useState<Citation[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,6 +55,65 @@ export default function ChatPage() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sessions");
+      const data = (await res.json()) as {
+        success: boolean;
+        data?: { sessions: ChatSession[] };
+      };
+      if (data.success && data.data) {
+        setSessions(data.data.sessions);
+      }
+    } catch {
+      // Silently fail for session loading
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  async function loadSession(id: string) {
+    try {
+      const res = await fetch(`/api/sessions/${id}/messages`);
+      const data = (await res.json()) as {
+        success: boolean;
+        data?: {
+          messages: {
+            id: string;
+            role: string;
+            content: string;
+            citations?: Citation[];
+            confidence?: number;
+          }[];
+        };
+      };
+      if (data.success && data.data) {
+        setMessages(
+          data.data.messages.map((m) => ({
+            id: m.id,
+            role: m.role as "user" | "assistant",
+            content: m.content,
+            citations: m.citations,
+            confidence: m.confidence ?? undefined,
+          }))
+        );
+        setSessionId(id);
+        setShowHistory(false);
+      }
+    } catch {
+      // Silently fail
+    }
+  }
+
+  function startNewChat() {
+    setMessages([]);
+    setSessionId(null);
+    setSelectedCitations([]);
+    setShowHistory(false);
+  }
 
   async function sendMessage() {
     if (!input.trim() || loading) return;
@@ -57,7 +132,10 @@ export default function ChatPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg.content }),
+        body: JSON.stringify({
+          message: userMsg.content,
+          sessionId,
+        }),
       });
       const data = (await res.json()) as {
         success: boolean;
@@ -66,6 +144,7 @@ export default function ChatPage() {
           citations: Citation[];
           confidence: number;
           sourcesSearched: number;
+          sessionId?: string;
         };
         error?: string;
       };
@@ -82,6 +161,10 @@ export default function ChatPage() {
         setMessages((prev) => [...prev, assistantMsg]);
         if (data.data.citations?.length > 0) {
           setSelectedCitations(data.data.citations);
+        }
+        if (data.data.sessionId && !sessionId) {
+          setSessionId(data.data.sessionId);
+          loadSessions();
         }
       } else {
         setMessages((prev) => [
@@ -106,10 +189,138 @@ export default function ChatPage() {
     setLoading(false);
   }
 
+  async function exportChat(format: "markdown" | "citation" | "pdf") {
+    if (messages.length === 0) return;
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          format,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            citations: m.citations,
+            confidence: m.confidence,
+          })),
+          title: "Medical Research Chat",
+        }),
+      });
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      const ext =
+        format === "markdown" ? "md" : format === "citation" ? "txt" : "html";
+      a.href = url;
+      a.download = `openclaw-research.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Export failed silently
+    }
+  }
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
+      {/* Session history sidebar */}
+      <div
+        className={`${showHistory ? "w-64" : "w-0"} transition-all duration-200 overflow-hidden border-r border-gray-200 bg-white flex flex-col`}
+      >
+        <div className="p-3 border-b border-gray-100 flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-700">
+            Chat History
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={startNewChat}
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="p-2 space-y-1">
+            {sessions.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => loadSession(s.id)}
+                className={`w-full text-left p-2 rounded-lg text-xs transition-colors ${
+                  sessionId === s.id
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{s.title}</span>
+                </div>
+                <div className="flex items-center gap-1 mt-1 text-gray-400">
+                  <Clock className="w-3 h-3" />
+                  {new Date(s.created_at).toLocaleDateString()}
+                </div>
+              </button>
+            ))}
+            {sessions.length === 0 && (
+              <p className="text-xs text-gray-400 p-2 text-center">
+                No chat history yet
+              </p>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+
       {/* Chat area */}
       <div className="flex-1 flex flex-col">
+        {/* Toolbar */}
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-white">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs"
+            onClick={() => setShowHistory(!showHistory)}
+          >
+            <MessageSquare className="w-3.5 h-3.5 mr-1" />
+            History
+          </Button>
+          <div className="flex-1" />
+          {messages.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => exportChat("markdown")}
+              >
+                <FileDown className="w-3.5 h-3.5 mr-1" />
+                Markdown
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => exportChat("citation")}
+              >
+                <Quote className="w-3.5 h-3.5 mr-1" />
+                Citations
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => exportChat("pdf")}
+              >
+                <Download className="w-3.5 h-3.5 mr-1" />
+                PDF
+              </Button>
+            </div>
+          )}
+        </div>
+
         {messages.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="text-center max-w-lg">
