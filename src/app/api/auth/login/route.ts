@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createToken } from "@/lib/auth";
+import { createToken, verifyPassword } from "@/lib/auth";
+import { getUserByEmail } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -15,17 +16,35 @@ export async function POST(request: Request) {
       );
     }
 
-    // In production, verify against D1:
-    // const { env } = getCloudflareContext();
-    // const user = await env.DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
-    // if (!user || !(await verifyPassword(password, user.password_hash))) ...
+    const user = await getUserByEmail(email);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: "Invalid email or password" },
+        { status: 401 }
+      );
+    }
 
-    const id = crypto.randomUUID();
-    const token = await createToken({ userId: id, email });
+    const valid = await verifyPassword(password, user.password_hash);
+    if (!valid) {
+      return NextResponse.json(
+        { success: false, error: "Invalid email or password" },
+        { status: 401 }
+      );
+    }
+
+    const token = await createToken({ userId: user.id, email: user.email });
 
     const response = NextResponse.json({
       success: true,
-      data: { user: { id, email, name: email.split("@")[0], plan: "basic" }, token },
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          plan: user.plan,
+        },
+        token,
+      },
     });
 
     response.cookies.set("token", token, {
@@ -37,9 +56,10 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "Login failed";
     return NextResponse.json(
-      { success: false, error: "Login failed" },
+      { success: false, error: msg },
       { status: 500 }
     );
   }

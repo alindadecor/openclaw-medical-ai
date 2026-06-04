@@ -12,6 +12,7 @@ import {
   LogOut,
   Menu,
   X,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -19,6 +20,7 @@ import { useState } from "react";
 const navItems = [
   { href: "/chat", label: "Medical Chat", icon: MessageSquare },
   { href: "/research", label: "Research", icon: Search },
+  { href: "/workspace", label: "Workspace", icon: FolderOpen },
   { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

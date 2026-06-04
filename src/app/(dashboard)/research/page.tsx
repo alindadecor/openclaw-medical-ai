@@ -12,6 +12,8 @@ import {
   Calendar,
   Users,
   BookOpen,
+  FileDown,
+  Quote,
 } from "lucide-react";
 import type { PubMedArticle } from "@/lib/types";
 
@@ -46,16 +48,83 @@ export default function ResearchPage() {
     setLoading(false);
   }
 
+  function exportResults(format: "markdown" | "citation") {
+    if (results.length === 0) return;
+
+    if (format === "markdown") {
+      let md = `# PubMed Search Results: "${query}"\n\n`;
+      md += `*${total.toLocaleString()} total results | ${results.length} shown*\n\n---\n\n`;
+      results.forEach((a, i) => {
+        md += `## ${i + 1}. ${a.title}\n\n`;
+        md += `**Authors:** ${a.authors.join(", ")}\n\n`;
+        md += `**Journal:** ${a.journal} (${a.pubdate})\n\n`;
+        md += `**PMID:** ${a.pmid}${a.doi ? ` | **DOI:** ${a.doi}` : ""}\n\n`;
+        md += `**Link:** ${a.url}\n\n---\n\n`;
+      });
+      downloadFile(md, `pubmed-search-${slugify(query)}.md`, "text/markdown");
+    } else {
+      let bib = `PubMed Search Citations: "${query}"\nGenerated: ${new Date().toISOString().split("T")[0]}\nTotal: ${results.length} articles\n\n`;
+      results.forEach((a, i) => {
+        bib += `[${i + 1}] ${a.authors.join(", ")}. "${a.title}." ${a.journal} (${a.pubdate}). PMID: ${a.pmid}. ${a.url}\n\n`;
+      });
+      bib += `\n--- BibTeX ---\n\n`;
+      results.forEach((a) => {
+        bib += `@article{pmid${a.pmid},\n  title = {${a.title}},\n  author = {${a.authors.join(" and ")}},\n  journal = {${a.journal}},\n  year = {${a.pubdate}},\n  pmid = {${a.pmid}},\n  url = {${a.url}}\n}\n\n`;
+      });
+      downloadFile(bib, `pubmed-citations-${slugify(query)}.txt`, "text/plain");
+    }
+  }
+
+  function downloadFile(content: string, filename: string, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function slugify(text: string): string {
+    return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  }
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          Research Search
-        </h2>
-        <p className="text-gray-500 text-sm">
-          Search PubMed for biomedical literature. Access millions of
-          peer-reviewed articles.
-        </p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Research Search
+          </h2>
+          <p className="text-gray-500 text-sm">
+            Search PubMed for biomedical literature. Access millions of
+            peer-reviewed articles.
+          </p>
+        </div>
+        {results.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => exportResults("markdown")}
+            >
+              <FileDown className="w-3.5 h-3.5 mr-1" />
+              Export MD
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => exportResults("citation")}
+            >
+              <Quote className="w-3.5 h-3.5 mr-1" />
+              Export Citations
+            </Button>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSearch} className="flex gap-3 mb-8">

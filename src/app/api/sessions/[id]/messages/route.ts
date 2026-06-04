@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getTokenFromHeaders, verifyToken } from "@/lib/auth";
-import { getUserById } from "@/lib/db";
+import { getSessionMessages } from "@/lib/db";
 
-export async function GET(request: Request) {
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const token = getTokenFromHeaders(request.headers);
     if (!token) {
@@ -11,7 +14,6 @@ export async function GET(request: Request) {
         { status: 401 }
       );
     }
-
     const payload = await verifyToken(token);
     if (!payload) {
       return NextResponse.json(
@@ -20,18 +22,18 @@ export async function GET(request: Request) {
       );
     }
 
-    const user = await getUserById(payload.userId);
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: "User not found" },
-        { status: 404 }
-      );
-    }
+    const { id } = await params;
+    const { results } = await getSessionMessages(id);
 
-    return NextResponse.json({ success: true, data: { user } });
+    const messages = results.map((m) => ({
+      ...m,
+      citations: m.citations ? JSON.parse(m.citations) : undefined,
+    }));
+
+    return NextResponse.json({ success: true, data: { messages } });
   } catch {
     return NextResponse.json(
-      { success: false, error: "Failed to get user" },
+      { success: false, error: "Failed to load messages" },
       { status: 500 }
     );
   }
