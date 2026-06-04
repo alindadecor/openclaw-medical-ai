@@ -22,9 +22,18 @@
 	"vars": {
 		"AI_GATEWAY_ID": "default",
 		"PUBMED_BASE_URL": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-	}
-	// D1, KV, and Vectorize bindings will be added after resource creation:
-	// npx wrangler d1 create openclaw-medical-db
-	// npx wrangler kv namespace create SESSION_KV
-	// Then update this file with the generated IDs.
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "openclaw-medical-db",
+			"database_id": "08a2a3fd-c73e-4497-bad9-0626130b0eae"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "SESSION_KV",
+			"id": "6ff670ecf2cb41d7a5ae25b7eb7477b2"
+		}
+	]
 }
