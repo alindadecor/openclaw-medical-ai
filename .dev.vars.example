@@ -1,0 +1,6 @@
+# Cloudflare credentials (required for AI Gateway & API calls)
+CLOUDFLARE_ACCOUNT_ID=your_account_id_here
+CLOUDFLARE_API_TOKEN=your_api_token_here
+
+# Optional: NCBI API key for higher PubMed rate limits
+# NCBI_API_KEY=your_ncbi_api_key

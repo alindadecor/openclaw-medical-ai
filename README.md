@@ -1,47 +1,125 @@
-# OpenNext Starter
+# OpenClaw Medical AI
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Research-grounded Medical AI SaaS platform powered by Cloudflare Workers. Every answer backed by verifiable citations from PubMed, FDA, and ClinicalTrials.gov.
+
+## Architecture
+
+```
+Frontend (Next.js 15 + shadcn/ui)
+  → API Routes (Server Actions)
+    → Cloudflare Workers runtime
+      → D1 (users, sessions, usage)
+      → Vectorize (paper embeddings)
+      → KV (sessions, rate limits)
+      → AI Gateway → GPT / Claude / Llama
+      → PubMed E-utilities API
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 15, TailwindCSS, shadcn/ui, TanStack Query |
+| Backend | Cloudflare Workers via @opennextjs/cloudflare |
+| Database | Cloudflare D1 |
+| Vector Search | Cloudflare Vectorize |
+| Cache/Sessions | Cloudflare KV |
+| LLM | OpenAI GPT / Claude / Llama via AI Gateway |
+| Data Sources | PubMed (NCBI), FDA, ClinicalTrials.gov |
 
 ## Getting Started
 
-Read the documentation at https://opennext.js.org/cloudflare.
+### Prerequisites
 
-## Develop
+- Node.js 20+
+- Cloudflare account with Workers plan
+- (Optional) NCBI API key for higher PubMed rate limits
 
-Run the Next.js development server:
+### Local Development
 
 ```bash
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars with your Cloudflare credentials
+
+# Run development server
 npm run dev
-# or similar package manager command
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment Variables
 
-## Preview
+Create `.dev.vars` with:
 
-Preview the application locally on the Cloudflare runtime:
-
-```bash
-npm run preview
-# or similar package manager command
+```
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+CLOUDFLARE_API_TOKEN=your_api_token
 ```
 
-## Deploy
-
-Deploy the application to Cloudflare:
+### Deploy to Cloudflare
 
 ```bash
+# Create D1 database
+npx wrangler d1 create openclaw-medical-db
+# Update database_id in wrangler.jsonc
+
+# Create KV namespace
+npx wrangler kv namespace create SESSION_KV
+# Update id in wrangler.jsonc
+
+# Apply database schema
+npx wrangler d1 execute openclaw-medical-db --file=schema.sql
+
+# Set secrets
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+npx wrangler secret put CLOUDFLARE_API_TOKEN
+
+# Deploy
 npm run deploy
-# or similar package manager command
 ```
 
-## Learn More
+## Features (Phase 1 MVP)
 
-To learn more about Next.js, take a look at the following resources:
+- **Landing Page** — Hero, features, pricing, live PubMed demo
+- **Authentication** — JWT-based login/register
+- **Medical Chat** — RAG-powered chat with citation panel and confidence scores
+- **Research Search** — PubMed search with article details
+- **Billing** — Plan tiers (Basic $29 / Pro $99 / Elite $299)
+- **Settings** — Profile and API key management
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## RAG Pipeline
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+Question → Search PubMed → Retrieve Abstracts → Build Context → LLM via AI Gateway → Extract Citations → Verified Answer
+```
+
+## Pricing
+
+| Plan | Price | Queries |
+|------|-------|---------|
+| Basic | $29/mo | 1,000 |
+| Pro | $99/mo | 10,000 |
+| Elite | $299/mo | Unlimited |
+| API | $0.01/call | Pay per call |
+
+## Data Sources
+
+- U.S. Food and Drug Administration (FDA)
+- PubMed / National Library of Medicine
+- ClinicalTrials.gov
+- National Institutes of Health (NIH)
+- European Medicines Agency (EMA)
+
+## Roadmap
+
+- **Phase 1** (Current): Landing, Auth, Medical Chat, Research Search, Billing
+- **Phase 2**: FDA Alerts, Clinical Trials Dashboard, Saved Reports
+- **Phase 3**: Admin Panel, API Marketplace, Team Workspace
+
+## License
+
+Proprietary — All rights reserved.
